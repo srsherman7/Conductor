@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conductor: AI Orchestration System</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .response-container {
+            border: 1px solid #dad9d9;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #dbdbdb;
+        }
+        .model-response {
+            margin-top: 20px;
+            padding: 10px;
+            border-left: 3px solid #007bff;
+            background-color: #f0f7ff;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4"><img src="/static/default_icon.png">Conductor: AI Orchestration System</h1>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Query Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="queryForm">
+                            <div class="mb-3">
+                                <label for="prompt" class="form-label">Prompt:</label>
+                                <textarea class="form-control" id="prompt" rows="4" required></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Select AI Models:</label>
+                                <div class="form-check">
+                                    {% for model in available_models %}
+                                    <div class="form-check">
+                                        <input class="form-check-input model-checkbox" type="checkbox" value="{{ model }}" id="model-{{ model }}">
+                                        <label class="form-check-label" for="model-{{ model }}">
+                                            {{ model }}
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="orchestratorModel" class="form-label">Orchestrator Model:</label>
+                                <select class="form-select" id="orchestratorModel">
+                                    {% for model in available_models %}
+                                    <option value="{{ model }}" {% if model == 'claude-opus' %}selected{% endif %}>{{ model }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Submit Query</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Processing query across multiple AI models...</p>
+                </div>
+                
+                <div id="results" style="display: none;">
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h5>Compiled Response</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="compiledResponse" class="response-container"></div>
+                            <div id="processingTime" class="text-muted small"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Individual Model Responses</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="individualResponses"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('queryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Get the prompt
+            const prompt = document.getElementById('prompt').value;
+            
+            // Get selected models
+            const selectedModels = [];
+            document.querySelectorAll('.model-checkbox:checked').forEach(checkbox => {
+                selectedModels.push(checkbox.value);
+            });
+            
+            // Make sure at least one model is selected
+            if (selectedModels.length === 0) {
+                alert('Please select at least one AI model');
+                return;
+            }
+            
+            // Get orchestrator model
+            const orchestratorModel = document.getElementById('orchestratorModel').value;
+            
+            // Show loading spinner
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            
+            // Send query to backend
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt,
+                        models: selectedModels,
+                        orchestrator: orchestratorModel
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Display the results
+                    document.getElementById('compiledResponse').innerHTML = formatText(data.compiled_response);
+                    document.getElementById('processingTime').textContent = `Processing time: ${data.processing_time}`;
+                    
+                    // Display individual responses
+                    const responsesContainer = document.getElementById('individualResponses');
+                    responsesContainer.innerHTML = '';
+                    
+                    data.individual_responses.forEach(modelResponse => {
+                        const modelDiv = document.createElement('div');
+                        modelDiv.className = 'model-response';
+                        modelDiv.innerHTML = `
+                            <h6>${modelResponse.model}</h6>
+                            <div>${formatText(modelResponse.response)}</div>
+                        `;
+                        responsesContainer.appendChild(modelDiv);
+                    });
+                    
+                    // Show results
+                    document.getElementById('results').style.display = 'block';
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                alert(`Error processing request: ${error.message}`);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+        
+        // Function to format text with line breaks
+        function formatText(text) {
+            return text.replace(/\n/g, '<br>');
+        }
+    </script>
+</body>
+</html>
